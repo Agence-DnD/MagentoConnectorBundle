@@ -266,7 +266,7 @@ class NormalizerGuesser extends AbstractGuesser
     }
 
     /**
-     * Checks if ApiImport is in Magento and if user has role access
+     * Get the normalize for Magento Csv format
      *
      * @param MagentoSoapClientParameters $clientParameters
      *

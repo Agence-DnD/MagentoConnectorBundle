@@ -80,7 +80,7 @@ abstract class AbstractGuesser
 
         try {
             $client->call('import.importEntities', array([], 'catalog_product'));
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             $result = $e->getMessage();
         }
 

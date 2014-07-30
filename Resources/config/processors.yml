@@ -36,6 +36,9 @@ services:
             - '@pim_magento_connector.webservice.magento_soap_client_parameters_registry'
             - '@pim_magento_connector.manager.attribute'
             - '@pim_magento_connector.manager.association_type'
+            - '@pim_magento_connector.manager.currency'
+            - '@pim_catalog.manager.channel'
+            - '@pim_magento_connector.merger.attribute_code_mapping'
 
     pim_magento_connector.processor.configurable:
         class: %pim_magento_connector.processor.configurable.class%

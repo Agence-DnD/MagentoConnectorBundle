@@ -4,14 +4,18 @@ namespace Pim\Bundle\MagentoConnectorBundle\Processor;
 
 use Akeneo\Bundle\BatchBundle\Item\InvalidItemException;
 use Pim\Bundle\CatalogBundle\Model\ProductInterface;
+use Pim\Bundle\CatalogBundle\Manager\ChannelManager;
 use Pim\Bundle\MagentoConnectorBundle\Guesser\WebserviceGuesser;
 use Pim\Bundle\MagentoConnectorBundle\Guesser\NormalizerGuesser;
 use Pim\Bundle\MagentoConnectorBundle\Manager\LocaleManager;
 use Pim\Bundle\MagentoConnectorBundle\Manager\AttributeManager;
 use Pim\Bundle\MagentoConnectorBundle\Manager\AssociationTypeManager;
+use Pim\Bundle\MagentoConnectorBundle\Manager\CurrencyManager;
 use Pim\Bundle\MagentoConnectorBundle\Merger\MagentoMappingMerger;
 use Pim\Bundle\MagentoConnectorBundle\Normalizer\AbstractNormalizer;
+use Pim\Bundle\MagentoConnectorBundle\Normalizer\ProductMagentoCsvNormalizer;
 use Pim\Bundle\MagentoConnectorBundle\Webservice\MagentoSoapClientParametersRegistry;
+use Symfony\Component\Validator\Constraints as Assert;
 
 /**
  * Magento Csv product processor
@@ -22,6 +26,14 @@ use Pim\Bundle\MagentoConnectorBundle\Webservice\MagentoSoapClientParametersRegi
  */
 class ProductToMagentoCsvProcessor extends AbstractProcessor
 {
+    const MAGENTO_VISIBILITY_CATALOG_SEARCH = 4;
+
+    /** @var boolean $enabled */
+    protected $enabled;
+
+    /** @var integer $visibility */
+    protected $visibility = self::MAGENTO_VISIBILITY_CATALOG_SEARCH;
+
     /** @var string */
     protected $pimGrouped;
 
@@ -40,10 +52,54 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
     /** @var AssociationTypeManager $associationTypeManager */
     protected $associationTypeManager;
 
+    /** @var ProductMagentoCsvNormalizer $productNormalizer */
+    protected $productNormalizer;
+
+    /** @var array $magentoStoreViews */
+    protected $magentoStoreViews;
+
+    /** @var array $magentoAttributes */
+    protected $magentoAttributes;
+
+    /** @var array $attributesToBeSent */
+    protected $attributesToBeSent;
+
+    /** @var array $magentoAttributesOptions */
+    protected $magentoAttributesOptions;
+
+    /** @var boolean $initialized */
+    protected $initialized = false;
+
+    /** @var ChannelManager $channelManager */
+    protected $channelManager;
+
+    /** @var CurrencyManager $currencyManager */
+    protected $currencyManager;
+
+    /** @var string $attributeCodeMapping */
+    protected $attributeCodeMapping;
+
+    /** @var MagentoMappingMerger $attributeMappingMerger */
+    protected $attributeMappingMerger;
+
+    /**
+     * @var Currency
+     * @Assert\NotBlank(groups={"Execution"})
+     */
+    protected $currency;
+
+    /**
+     * @Assert\NotBlank(groups={"Execution"})
+     */
+    protected $channel;
+
     /**
      * {@inheritDoc}
      * @param AttributeManager       $attributeManager
      * @param AssociationTypeManager $associationTypeManager
+     * @param CurrencyManager        $currencyManager
+     * @param ChannelManager         $channelManager
+     * @param MagentoMappingMerger   $attributeMappingMerger
      */
     public function __construct(
         WebserviceGuesser $webserviceGuesser,
@@ -52,7 +108,10 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
         MagentoMappingMerger $storeViewMappingMerger,
         MagentoSoapClientParametersRegistry $clientParametersRegistry,
         AttributeManager $attributeManager,
-        AssociationTypeManager $associationTypeManager
+        AssociationTypeManager $associationTypeManager,
+        CurrencyManager $currencyManager,
+        ChannelManager $channelManager,
+        MagentoMappingMerger $attributeMappingMerger
     ) {
         parent::__construct(
             $webserviceGuesser,
@@ -64,6 +123,9 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
 
         $this->attributeManager       = $attributeManager;
         $this->associationTypeManager = $associationTypeManager;
+        $this->currencyManager        = $currencyManager;
+        $this->channelManager         = $channelManager;
+        $this->attributeMappingMerger = $attributeMappingMerger;
     }
 
     /**
@@ -73,11 +135,46 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
     {
         parent::beforeExecute();
 
-        $this->globalContext['pimGrouped']          = $this->pimGrouped;
-        $this->globalContext['smallImageAttribute'] = $this->smallImageAttribute;
-        $this->globalContext['baseImageAttribute']  = $this->baseImageAttribute;
-        $this->globalContext['thumbnailAttribute']  = $this->thumbnailAttribute;
-        $this->globalContext['defaultStoreView']    = $this->getDefaultStoreView();
+        if (!$this->initialized) {
+            $this->magentoStoreViews        = $this->webservice->getStoreViewsList();
+            $this->magentoAttributes        = $this->webservice->getAllAttributes();
+            $this->magentoAttributesOptions = $this->webservice->getAllAttributesOptions();
+            $this->productNormalizer        = $this->normalizerGuesser->getProductMagentoCsvNormalizer(
+                $this->getClientParameters()
+            );
+
+            $this->initialized = true;
+        }
+
+        $this->globalContext = array_merge(
+            $this->globalContext,
+            [
+                'channel'                  => $this->channel,
+                'locales'                  => $this->localeManager->getActiveCodes(),
+                'defaultLocale'            => $this->getDefaultLocale(),
+                'website'                  => $this->website,
+                'magentoAttributes'        => $this->magentoAttributes,
+                'magentoAttributesOptions' => $this->magentoAttributesOptions,
+                'magentoStoreViews'        => $this->magentoStoreViews,
+                'pimGrouped'               => $this->pimGrouped,
+                'smallImageAttribute'      => $this->smallImageAttribute,
+                'baseImageAttribute'       => $this->baseImageAttribute,
+                'thumbnailAttribute'       => $this->thumbnailAttribute,
+                'defaultStoreView'         => $this->getDefaultStoreView(),
+                'attributeCodeMapping'     => $this->attributeMappingMerger->getMapping()
+            ]
+        );
+//        die(var_dump($this->globalContext));
+    }
+
+    /**
+     * Called after the configuration is set
+     */
+    protected function afterConfigurationSet()
+    {
+        parent::afterConfigurationSet();
+
+        $this->attributeMappingMerger->setParameters($this->getClientParameters(), $this->getDefaultStoreView());
     }
 
     /**
@@ -93,9 +190,9 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
     protected function normalizeProduct(ProductInterface $product, $context)
     {
         try {
-            $processedItem = $this->normalizerGuesser->normalize(
+            $processedItem = $this->productNormalizer->normalize(
                 $product,
-                AbstractNormalizer::MAGENTO_FORMAT,
+                AbstractNormalizer::MAGENTO_CSV_FORMAT,
                 $context
             );
         } catch (NormalizeException $e) {
@@ -118,11 +215,10 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
      */
     public function process($item)
     {
-        $item = is_array($item) ? $item : [$item];
-
         $this->beforeExecute();
 
-        $processedItems = [];
+        $processedItem = $this->normalizeProduct($item, $this->globalContext);
+        die(var_dump($processedItem));
 
 //        $magentoProducts = $this->webservice->getProductsStatus($item);
 
@@ -133,6 +229,7 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
 
     /**
      * Get pim grouped
+     *
      * @return string
      */
     public function getPimGrouped()
@@ -142,6 +239,7 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
 
     /**
      * Set pim grouped
+     *
      * @param string $pimGrouped
      *
      * @return ProductProcessor
@@ -155,6 +253,7 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
 
     /**
      * Get small image
+     *
      * @return string
      */
     public function getSmallImageAttribute()
@@ -164,6 +263,7 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
 
     /**
      * Set small image
+     *
      * @param string $smallImageAttribute
      *
      * @return ProductProcessor
@@ -177,6 +277,7 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
 
     /**
      * Get base image attribute
+     *
      * @return string
      */
     public function getBaseImageAttribute()
@@ -186,6 +287,7 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
 
     /**
      * Set base image attribute
+     *
      * @param string $baseImageAttribute
      *
      * @return ProductProcessor
@@ -199,6 +301,7 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
 
     /**
      * Get thumbnail attribute
+     *
      * @return string
      */
     public function getThumbnailAttribute()
@@ -208,6 +311,7 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
 
     /**
      * Set thumbnail attribute
+     *
      * @param string $thumbnailAttribute
      *
      * @return ProductProcessor
@@ -220,13 +324,162 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
     }
 
     /**
+     * Get channel
+     *
+     * @return string channel
+     */
+    public function getChannel()
+    {
+        return $this->channel;
+    }
+
+    /**
+     * Set channel
+     *
+     * @param string $channel channel
+     *
+     * @return AbstractProcessor
+     */
+    public function setChannel($channel)
+    {
+        $this->channel = $channel;
+
+        return $this;
+    }
+
+    /**
+     * Get currency
+     *
+     * @return string currency
+     */
+    public function getCurrency()
+    {
+        return $this->currency;
+    }
+
+    /**
+     * Set currency
+     *
+     * @param string $currency currency
+     *
+     * @return AbstractProcessor
+     */
+    public function setCurrency($currency)
+    {
+        $this->currency = $currency;
+
+        return $this;
+    }
+
+    /**
+     * get enabled
+     *
+     * @return string enabled
+     */
+    public function getEnabled()
+    {
+        return $this->enabled;
+    }
+
+    /**
+     * Set enabled
+     *
+     * @param string $enabled enabled
+     *
+     * @return AbstractProcessor
+     */
+    public function setEnabled($enabled)
+    {
+        $this->enabled = $enabled;
+
+        return $this;
+    }
+
+    /**
+     * get visibility
+     *
+     * @return string visibility
+     */
+    public function getVisibility()
+    {
+        return $this->visibility;
+    }
+
+    /**
+     * Set visibility
+     *
+     * @param string $visibility visibility
+     *
+     * @return AbstractProcessor
+     */
+    public function setVisibility($visibility)
+    {
+        $this->visibility = $visibility;
+
+        return $this;
+    }
+
+    /**
+     * Get attribute code mapping
+     *
+     * @return string attributeCodeMapping
+     */
+    public function getAttributeCodeMapping()
+    {
+        return json_encode($this->attributeMappingMerger->getMapping()->toArray());
+    }
+
+    /**
+     * Set attribute code mapping
+     *
+     * @param string $attributeCodeMapping attributeCodeMapping
+     *
+     * @return AbstractProcessor
+     */
+    public function setAttributeCodeMapping($attributeCodeMapping)
+    {
+        $this->attributeMappingMerger->setMapping(json_decode($attributeCodeMapping, true));
+
+        return $this;
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function getConfigurationFields()
     {
         return array_merge(
             parent::getConfigurationFields(),
+            $this->attributeMappingMerger->getConfigurationField(),
             [
+                'enabled' => [
+                    'type'    => 'switch',
+                    'options' => [
+                        'required' => true,
+                        'help'     => 'pim_magento_connector.export.enabled.help',
+                        'label'    => 'pim_magento_connector.export.enabled.label'
+                    ]
+                ],
+                'visibility' => [
+                    'type'    => 'text',
+                    'options' => [
+                        'required' => true,
+                        'help'     => 'pim_magento_connector.export.visibility.help',
+                        'label'    => 'pim_magento_connector.export.visibility.label'
+                    ]
+                ],
+                'currency' => [
+                    'type'    => 'choice',
+                    'options' => [
+                        'choices'  => $this->currencyManager->getCurrencyChoices(),
+                        'required' => true,
+                        'help'     => 'pim_magento_connector.export.currency.help',
+                        'label'    => 'pim_magento_connector.export.currency.label',
+                        'attr' => [
+                            'class' => 'select2'
+                        ]
+                    ]
+                ],
                 'smallImageAttribute' => [
                     'type' => 'choice',
                     'options' => [
@@ -271,6 +524,15 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
                         ]
                     ]
                 ],
+                'channel' => [
+                    'type'    => 'choice',
+                    'options' => [
+                        'choices'  => $this->channelManager->getChannelChoices(),
+                        'required' => true,
+                        'help'     => 'pim_magento_connector.export.channel.help',
+                        'label'    => 'pim_magento_connector.export.channel.label'
+                    ]
+                ]
             ]
         );
     }
