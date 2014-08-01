@@ -18,6 +18,16 @@ use Pim\Bundle\CatalogBundle\Manager\MediaManager;
  */
 class ProductMagentoCsvNormalizer extends AbstractNormalizer
 {
+    const SKU                 = 'sku';
+    const VISIBILITY          = 'visibility';
+    const ENABLED             = 'status';
+    const ATTRIBUTE_SET       = '_attribute_set';
+    const CREATED_AT          = 'created_at';
+    const UPDATED_AT          = 'updated_at';
+    const PRODUCT_WEBSITE     = '_product_websites';
+    const PRODUCT_TYPE        = '_type';
+    const PRODUCT_TYPE_SIMPLE = 'simple';
+
     /** @var ProductValueNormalizer */
     protected $productValueNormalizer;
 
@@ -57,16 +67,7 @@ class ProductMagentoCsvNormalizer extends AbstractNormalizer
      */
     public function normalize($object, $format = null, array $context = array())
     {
-        $processedItem = [];
-
-        $processedItem[$context['defaultStoreView']] = [
-            'sku'               => (string) $object->getIdentifier(),
-            '_type'             => 'simple',
-            '_product_websites' => $context['website'],
-            'status'            => (integer) $context['enabled'],
-            'visibility'        => (integer) $context['visibility'],
-            '_attribute_set'    => $object->getFamily()->getCode()
-        ];
+        $processedItem = $this->getCustomValue($object, $context);
 
         $normalizedValues = $this->getValues(
             $object,
@@ -176,4 +177,31 @@ class ProductMagentoCsvNormalizer extends AbstractNormalizer
         return $normalizedValues;
     }
 
-} 
+    /**
+     * Get custom values
+     *
+     * @param ProductInterface $product
+     * @param array            $context
+     *
+     * @return mixed
+     */
+    protected function getCustomValue(
+        ProductInterface $product,
+        $context
+    ) {
+        $defaultStoreView = $context['defaultStoreView'];
+
+        $processedItem[$defaultStoreView] = [
+            self::SKU             => (string) $product->getIdentifier(),
+            self::PRODUCT_TYPE    => self::PRODUCT_TYPE_SIMPLE,
+            self::PRODUCT_WEBSITE => $context['website'],
+            self::ENABLED         => (integer) $context['enabled'],
+            self::VISIBILITY      => (integer) $context['visibility'],
+            self::ATTRIBUTE_SET   => $product->getFamily()->getCode(),
+            self::CREATED_AT      => $product->getCreated()->format(AbstractNormalizer::DATE_FORMAT),
+            self::UPDATED_AT      => $product->getUpdated()->format(AbstractNormalizer::DATE_FORMAT)
+        ];
+
+        return $processedItem;
+    }
+}
