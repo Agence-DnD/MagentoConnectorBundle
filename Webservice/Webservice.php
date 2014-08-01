@@ -45,6 +45,7 @@ class Webservice
     const SOAP_ACTION_LINK_LIST                              = 'catalog_product_link.list';
     const SOAP_ACTION_LINK_REMOVE                            = 'catalog_product_link.remove';
     const SOAP_ACTION_LINK_CREATE                            = 'catalog_product_link.assign';
+    const SOAP_ACTION_IMPORT_ENTITIES_API_IMPORT             = 'import.importEntities';
 
     const SOAP_DEFAULT_STORE_VIEW                            = 'default';
     const IMAGES                                             = 'images';
@@ -789,6 +790,25 @@ class Webservice
             [
                 $attributeSetId,
                 $forceProductsRemove
+            ]
+        );
+    }
+
+    /**
+     * Send entities to ApiImport
+     *
+     * @var array  $entities
+     * @var string $entityType
+     */
+    public function sendEntitiesThroughApiImport(
+        $entities,
+        $entityType
+    ) {
+        return $this->client->call(
+            self::SOAP_ACTION_IMPORT_ENTITIES_API_IMPORT,
+            [
+                $entities,
+                $entityType
             ]
         );
     }

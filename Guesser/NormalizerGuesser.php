@@ -273,13 +273,18 @@ class NormalizerGuesser extends AbstractGuesser
      * @throws ApiImportNotSupportedException
      *
      */
-    public function getProductMagentoCsvNormalizer(MagentoSoapClientParameters $clientParameters)
+    public function getProductMagentoCsvNormalizer(MagentoSoapClientParameters $clientParameters, $currencyCode)
     {
         $client = $this->magentoSoapClientFactory->getMagentoSoapClient($clientParameters);
         $apiImportStatus = $this->getApiImportStatus($client);
 
         if ($apiImportStatus['isEnable']) {
-            return new ProductMagentoCsvNormalizer($this->channelManager);
+            return new ProductMagentoCsvNormalizer(
+                $this->channelManager,
+                $this->mediaManager,
+                $this->productValueNormalizer,
+                $currencyCode
+            );
         } else {
             throw new ApiImportNotSupportedException($apiImportStatus['message']);
         }

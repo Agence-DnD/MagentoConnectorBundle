@@ -137,8 +137,6 @@ abstract class AbstractProcessor extends MagentoItemStep implements ItemProcesso
     {
         $this->storeViewMappingMerger->setMapping(json_decode($storeViewMapping, true));
 
-        $this->storeviewMapping = $this->getStoreViewMapping();
-
         return $this;
     }
 

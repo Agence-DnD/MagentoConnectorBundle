@@ -27,6 +27,9 @@ class ProductValueNormalizer implements NormalizerInterface
 {
     const GLOBAL_SCOPE = 'global';
 
+    /** @var array */
+    protected $ignoredOptionMatchingAttributes = [];
+
     /**
      * Normalizes an object into a set of arrays/scalars
      *
@@ -72,6 +75,16 @@ class ProductValueNormalizer implements NormalizerInterface
     public function supportsNormalization($data, $format = null)
     {
         return $data instanceof ProductValueInterface && in_array($format, $this->supportedFormats);
+    }
+
+    /**
+     * Add ignored attribute in option matching test
+     *
+     * @var string $option
+     */
+    public function addIgnoredOptionMatchingAttributes($option)
+    {
+        $this->ignoredOptionMatchingAttributes[] = $option;
     }
 
     /**
@@ -405,7 +418,7 @@ class ProductValueNormalizer implements NormalizerInterface
      */
     protected function getIgnoredOptionMatchingAttributes()
     {
-        return [];
+        return $this->ignoredOptionMatchingAttributes;
     }
 
     /**

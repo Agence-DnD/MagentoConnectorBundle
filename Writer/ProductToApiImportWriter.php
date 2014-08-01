@@ -4,6 +4,7 @@ namespace Pim\Bundle\MagentoConnectorBundle\Writer;
 
 use Pim\Bundle\MagentoConnectorBundle\Guesser\WebserviceGuesser;
 use Pim\Bundle\MagentoConnectorBundle\Webservice\MagentoSoapClientParametersRegistry;
+use Akeneo\Bundle\BatchBundle\Item\InvalidItemException;
 
 /**
  * Product to Api Import writer
@@ -14,6 +15,9 @@ use Pim\Bundle\MagentoConnectorBundle\Webservice\MagentoSoapClientParametersRegi
  */
 class ProductToApiImportWriter extends AbstractWriter
 {
+    /** @var array */
+    protected $items = [];
+
     /**
      * @param WebserviceGuesser                   $webserviceGuesser
      * @param MagentoSoapClientParametersRegistry $clientParametersRegistry
@@ -30,8 +34,22 @@ class ProductToApiImportWriter extends AbstractWriter
      */
     public function write(array $items)
     {
-        printf('WRITER');
-        die(var_dump($items));
+        $this->beforeExecute();
+
+        foreach ($items as $item) {
+            $this->items = array_merge($this->items, $item);
+        }
     }
 
-} 
+    /**
+     * Send all product to Magento
+     */
+    public function flush()
+    {
+        try {
+            $this->webservice->sendEntitiesThroughApiImport($this->items, 'catalog_product');
+        } catch (\Exception $e) {
+            throw new InvalidItemException($e->getMessage(), []);
+        }
+    }
+}

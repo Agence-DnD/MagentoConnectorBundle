@@ -5,6 +5,9 @@ namespace Pim\Bundle\MagentoConnectorBundle\Normalizer;
 use Pim\Bundle\CatalogBundle\Model\ProductInterface;
 use Pim\Bundle\ConnectorMappingBundle\Mapper\MappingCollection;
 use Symfony\Component\Serializer\Normalizer\scalar;
+use Pim\Bundle\CatalogBundle\Entity\AttributeOption;
+use Pim\Bundle\CatalogBundle\Manager\ChannelManager;
+use Pim\Bundle\CatalogBundle\Manager\MediaManager;
 
 /**
  * A normalizer to transform a product entity into Magento Csv format
@@ -15,6 +18,34 @@ use Symfony\Component\Serializer\Normalizer\scalar;
  */
 class ProductMagentoCsvNormalizer extends AbstractNormalizer
 {
+    /** @var ProductValueNormalizer */
+    protected $productValueNormalizer;
+
+    /** @var MediaManager */
+    protected $mediaManager;
+
+    /** @var string */
+    protected $currencyCode;
+
+    /**
+     * Constructor
+     * @param ChannelManager         $channelManager
+     * @param MediaManager           $mediaManager
+     * @param ProductValueNormalizer $productValueNormalizer
+     */
+    public function __construct(
+        ChannelManager $channelManager,
+        MediaManager $mediaManager,
+        ProductValueNormalizer $productValueNormalizer,
+        $currencyCode
+    ) {
+        parent::__construct($channelManager);
+
+        $this->mediaManager           = $mediaManager;
+        $this->productValueNormalizer = $productValueNormalizer;
+        $this->currencyCode           = $currencyCode;
+    }
+
     /**
      * Normalizes an object into a set of arrays/scalars
      *
@@ -26,45 +57,38 @@ class ProductMagentoCsvNormalizer extends AbstractNormalizer
      */
     public function normalize($object, $format = null, array $context = array())
     {
-//        die(var_dump($context['attributeCodeMapping']));
         $processedItem = [];
 
-        foreach ($object->getValues() as $label => $value) {
-            printf(PHP_EOL . 'LABEL' . PHP_EOL);
-            var_dump($label);
-            printf(PHP_EOL . 'VALUE' . PHP_EOL);
-            var_dump($value);
+        $processedItem[$context['defaultStoreView']] = [
+            'sku'               => (string) $object->getIdentifier(),
+            '_type'             => 'simple',
+            '_product_websites' => $context['website'],
+            'status'            => (integer) $context['enabled'],
+            'visibility'        => (integer) $context['visibility'],
+            '_attribute_set'    => $object->getFamily()->getCode()
+        ];
+
+        $normalizedValues = $this->getValues(
+            $object,
+            $context['magentoAttributes'],
+            $context['magentoAttributesOptions'],
+            $context['defaultLocale'],
+            $context['defaultStoreView'],
+            $context['channel'],
+            $context['attributeCodeMapping'],
+            false
+        );
+
+        $processedItem = array_merge_recursive($processedItem, $normalizedValues);
+
+        foreach ($processedItem as $storeView => &$value) {
+            if ($context['storeViewMapping']->getTarget($storeView) !== $context['defaultStoreView']) {
+                unset($value['tax_class_id']);
+            }
+            $value['_store'] = $context['storeViewMapping']->getTarget($storeView);
         }
-        die();
-        $processedItem['sku']   = (string) $object->getIdentifier();
-        $processedItem['_type'] = 'simple';
-//        $processedItem[''] = $object->;
-//        $processedItem[''] = $object->;
 
-        $processedItem['name']  = $object->getLabel();
-//        $processedItem['price'] = $object->getPrice();
-//        $processedItem[''] = $object->;
-//        $processedItem[''] = $object->;
-//        $processedItem[''] = $object->;
-
-
-        die(var_dump($processedItem));
-        $processedItem['description'] =
-            array(
-                'description'       => 'Some description',
-                '_attribute_set'    => 'Default',
-                'short_description' => 'Some short description',
-                '_product_websites' => 'base',
-                'status'            => Mage_Catalog_Model_Product_Status::STATUS_ENABLED,
-                'visibility'        => Mage_Catalog_Model_Product_Visibility::VISIBILITY_BOTH,
-                'tax_class_id'      => 0,
-                'is_in_stock'       => 1,
-
-                'price'  => rand(1, 1000),
-                'weight' => rand(1, 1000),
-                'qty'    => rand(1, 30)
-            );
-        return $object;
+        return array_values($processedItem);
     }
 
     /**
@@ -80,68 +104,76 @@ class ProductMagentoCsvNormalizer extends AbstractNormalizer
     }
 
     /**
-     * Get the default product with all attributes (ie : event the non localizable ones)
+     * Get values array for a given product
      *
-     * @param ProductInterface  $product                  The given product
-     * @param array             $magentoAttributes        Attribute list from Magento
-     * @param array             $magentoAttributesOptions Attribute options list from Magento
-     * @param integer           $attributeSetId           Attribute set id
-     * @param string            $defaultLocale            Default locale
-     * @param string            $channel                  Channel
-     * @param string            $website                  Website name
-     * @param MappingCollection $categoryMapping          Root category mapping
-     * @param MappingCollection $attributeMapping         Attribute mapping
-     * @param string            $pimGrouped               Pim grouped association code
-     * @param bool              $create                   Is it a creation ?
-     * @param array             $context                  Context
+     * @param ProductInterface  $product
+     * @param array             $magentoAttributes
+     * @param array             $magentoAttributesOptions
+     * @param string            $defaultLocale
+     * @param string            $defaultStoreView
+     * @param string            $scopeCode
+     * @param MappingCollection $attributeCodeMapping
+     * @param boolean           $onlyLocalized
      *
-     * @return array The default product data
+     * @return array
      */
-    protected function getDefaultProduct(
+    protected function getValues(
         ProductInterface $product,
+        $magentoAttributes,
+        $magentoAttributesOptions,
         $defaultLocale,
-        $website,
-        $defaultStoreValue
+        $defaultStoreView,
+        $scopeCode,
+        MappingCollection $attributeCodeMapping,
+        $onlyLocalized
     ) {
-        $sku           = (string) $product->getIdentifier();
-        $defaultValues = $this->getValues(
-            $product,
-            $magentoAttributes,
-            $magentoAttributesOptions,
-            $defaultLocale,
-            $channel,
-            $categoryMapping,
-            $attributeMapping,
-            false
-        );
+        $context = [
+            'identifier'               => $product->getIdentifier(),
+            'scopeCode'                => $scopeCode,
+            'onlyLocalized'            => $onlyLocalized,
+            'magentoAttributes'        => $magentoAttributes,
+            'magentoAttributesOptions' => $magentoAttributesOptions,
+            'attributeCodeMapping'     => $attributeCodeMapping,
+            'currencyCode'             => $this->currencyCode
+        ];
 
-        $defaultValues['websites'] = [$website];
+        $normalizedValues = [];
 
-        if ($create) {
-            if ($this->hasGroupedProduct($product, $pimGrouped)) {
-                $productType = self::MAGENTO_GROUPED_PRODUCT_KEY;
-            } else {
-                $productType = self::MAGENTO_SIMPLE_PRODUCT_KEY;
+        foreach ($product->getValues() as $productValue) {
+            $locale = $productValue->getLocale();
+            $code = $productValue->getAttribute()->getCode();
+            $context['localeCode'] = $locale;
+            if ($attributeCodeMapping->containsKey($code)) {
+                if ($productValue->getData() instanceof AttributeOption) {
+                    $this->productValueNormalizer->addIgnoredOptionMatchingAttributes($code);
+                }
+
+                $normalizedValue = $this->productValueNormalizer->normalize(
+                    $productValue,
+                    'MagentoArray',
+                    $context
+                );
+
+                if (count($normalizedValue) === 1 && !empty(end($normalizedValue))) {
+                    if ('tax_class_id' === $code) {
+                        $value = (integer) end($normalizedValue);
+                    } else {
+                        $value = end($normalizedValue);
+                    }
+
+                    if (!empty($locale) && $locale != $defaultLocale) {
+                        $storeView = $locale;
+                    } else {
+                        $storeView = $defaultStoreView;
+                    }
+
+                    $keys = array_keys($normalizedValue);
+                    $normalizedValues[$storeView][end($keys)] = $value;
+                }
             }
-
-            //For the default storeview we create an entire product
-            $defaultProduct = [
-                $productType,
-                $attributeSetId,
-                $sku,
-                $defaultValues,
-                $defaultStoreValue
-            ];
-        } else {
-            $defaultProduct = [
-                $sku,
-                $defaultValues,
-                $defaultStoreValue,
-                'sku'
-            ];
         }
 
-        return $defaultProduct;
+        return $normalizedValues;
     }
 
 } 
