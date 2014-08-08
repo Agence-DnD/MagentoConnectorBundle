@@ -39,7 +39,8 @@ class MagentoSoapClient
                 'exceptions' => true,
                 'login'      => $this->clientParameters->getHttpLogin(),
                 'password'   => $this->clientParameters->getHttpPassword(),
-                'cache_wsdl' => WSDL_CACHE_BOTH
+                'cache_wsdl' => WSDL_CACHE_BOTH,
+                'keep-alive' => 1
             ];
 
             try {

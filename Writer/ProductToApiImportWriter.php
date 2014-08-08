@@ -46,6 +46,10 @@ class ProductToApiImportWriter extends AbstractWriter
      */
     public function flush()
     {
+//        $bulks = array_chunk($this->items, 2500);
+        // arrayIterator ?
+
+        $this->stepExecution->incrementSummaryInfo('Write');
         try {
             $this->webservice->sendEntitiesThroughApiImport($this->items, 'catalog_product');
         } catch (\Exception $e) {

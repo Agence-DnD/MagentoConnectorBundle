@@ -7,6 +7,7 @@ parameters:
     pim_magento_connector.checker.xml.class: Pim\Bundle\MagentoConnectorBundle\Validator\Checks\XmlChecker
     pim_magento_connector.webservice.url_explorer.class: Pim\Bundle\MagentoConnectorBundle\Webservice\UrlExplorer
     pim_magento_connector.webservice.magento_soap_client_parameters_registry.class: Pim\Bundle\MagentoConnectorBundle\Webservice\MagentoSoapClientParametersRegistry
+    pim_magento_connector.webservice.category_path_resolver.class: Pim\Bundle\MagentoConnectorBundle\Webservice\CategoryPathResolver
     pim_magento_connector.repository.group.class: Pim\Bundle\MagentoConnectorBundle\Entity\Repository\GroupRepository
     pim_magento_connector.manager.group.class: Pim\Bundle\MagentoConnectorBundle\Manager\GroupManager
     pim_magento_connector.step.prune.class: Pim\Bundle\MagentoConnectorBundle\Step\PruneStep
@@ -32,6 +33,8 @@ services:
             - '@pim_magento_connector.manager.category_mapping'
             - '@pim_magento_connector.manager.association_type'
             - '@pim_magento_connector.manager.product_value'
+            - '@pim_catalog.manager.category'
+            - '@pim_magento_connector.webservice.category_path_resolver'
 
     # validator
     pim_magento_connector.validator.has_valid_credentials:
@@ -67,6 +70,9 @@ services:
 
     pim_magento_connector.webservice.magento_soap_client_parameters_registry:
         class: %pim_magento_connector.webservice.magento_soap_client_parameters_registry.class%
+
+    pim_magento_connector.webservice.category_path_resolver:
+        class: %pim_magento_connector.webservice.category_path_resolver.class%
 
     pim_magento_connector.repository.category:
         class: %pim_magento_connector.repository.category.class%

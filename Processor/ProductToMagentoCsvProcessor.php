@@ -7,63 +7,30 @@ use Pim\Bundle\CatalogBundle\Model\ProductInterface;
 use Pim\Bundle\CatalogBundle\Manager\ChannelManager;
 use Pim\Bundle\MagentoConnectorBundle\Guesser\WebserviceGuesser;
 use Pim\Bundle\MagentoConnectorBundle\Guesser\NormalizerGuesser;
+use Pim\Bundle\MagentoConnectorBundle\Manager\CategoryMappingManager;
 use Pim\Bundle\MagentoConnectorBundle\Manager\LocaleManager;
 use Pim\Bundle\MagentoConnectorBundle\Manager\AttributeManager;
 use Pim\Bundle\MagentoConnectorBundle\Manager\AssociationTypeManager;
 use Pim\Bundle\MagentoConnectorBundle\Manager\CurrencyManager;
 use Pim\Bundle\MagentoConnectorBundle\Merger\MagentoMappingMerger;
 use Pim\Bundle\MagentoConnectorBundle\Normalizer\AbstractNormalizer;
-use Pim\Bundle\MagentoConnectorBundle\Normalizer\ProductMagentoCsvNormalizer;
-use Pim\Bundle\MagentoConnectorBundle\Validator\Constraints\HasValidDefaultLocale;
-use Pim\Bundle\MagentoConnectorBundle\Validator\Constraints\HasValidCurrency;
+use Pim\Bundle\MagentoConnectorBundle\Normalizer\ProductNormalizer;
+use Pim\Bundle\MagentoConnectorBundle\Normalizer\Exception\NormalizeException;
 use Pim\Bundle\MagentoConnectorBundle\Webservice\MagentoSoapClientParametersRegistry;
+use Pim\Bundle\TransformBundle\Converter\MetricConverter;
 use Symfony\Component\Validator\Constraints as Assert;
 
 /**
- * Abstract magento product processor
+ * Magento csv product processor
  *
  * @author    Willy Mesnage <willy.mesnage@akeneo.com>
  * @copyright 2014 Akeneo SAS (http://www.akeneo.com)
  * @license   http://opensource.org/licenses/osl-3.0.php  Open Software License (OSL 3.0)
- *
- * @HasValidDefaultLocale(groups={"Execution"})
- * @HasValidCurrency(groups={"Execution"})
  */
-class ProductToMagentoCsvProcessor extends AbstractProcessor
+class ProductToMagentoCsvProcessor extends AbstractProductToMagentoCsvProcessor
 {
-    const MAGENTO_VISIBILITY_CATALOG_SEARCH = 4;
-
-    /** @var ProductNormalizer */
-    protected $productNormalizer;
-
-    /** @var ChannelManager */
-    protected $channelManager;
-
-    /** @var CurrencyManager */
-    protected $currencyManager;
-
-    /**
-     * @var Currency
-     * @Assert\NotBlank(groups={"Execution"})
-     */
-    protected $currency;
-
-    /**
-     * @Assert\NotBlank(groups={"Execution"})
-     */
-    protected $channel;
-
-    /** @var boolean */
-    protected $enabled;
-
-    /** @var integer */
-    protected $visibility = self::MAGENTO_VISIBILITY_CATALOG_SEARCH;
-
-    /** @var string */
-    protected $attributeCodeMapping;
-
-    /** @var MagentoMappingMerger */
-    protected $attributeMappingMerger;
+    /** @var MetricConverter */
+    protected $metricConverter;
 
     /** @var string */
     protected $pimGrouped;
@@ -77,36 +44,28 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
     /** @var string */
     protected $thumbnailAttribute;
 
-    /** @var AttributeManager $attributeManager */
-    protected $attributeManager;
-
     /** @var AssociationTypeManager $associationTypeManager */
     protected $associationTypeManager;
 
-    /** @var array $magentoStoreViews */
-    protected $magentoStoreViews;
+    /** @var boolean */
+    protected $initialized;
 
-    /** @var array $magentoAttributes */
-    protected $magentoAttributes;
-
-    /** @var array $attributesToBeSent */
-    protected $attributesToBeSent;
-
-    /** @var array $magentoAttributesOptions */
-    protected $magentoAttributesOptions;
-
-    /** @var boolean $initialized */
-    protected $initialized = false;
+    /** @var CategoryMappingManager  */
+    protected $categoryMappingManager;
 
     /**
-     * @param WebserviceGuesser        $webserviceGuesser
-     * @param ProductNormalizerGuesser $normalizerGuesser
-     * @param LocaleManager            $localeManager
-     * @param MagentoMappingMerger     $storeViewMappingMerger
-     * @param CurrencyManager          $currencyManager
-     * @param ChannelManager           $channelManager
-     * @param MagentoMappingMerger     $categoryMappingMerger
-     * @param MagentoMappingMerger     $attributeMappingMerger
+     * @param WebserviceGuesser                   $webserviceGuesser
+     * @param NormalizerGuesser                   $normalizerGuesser
+     * @param LocaleManager                       $localeManager
+     * @param MagentoMappingMerger                $storeViewMappingMerger
+     * @param MagentoSoapClientParametersRegistry $clientParametersRegistry
+     * @param AttributeManager                    $attributeManager
+     * @param AssociationTypeManager              $associationTypeManager
+     * @param CurrencyManager                     $currencyManager
+     * @param ChannelManager                      $channelManager
+     * @param MagentoMappingMerger                $attributeMappingMerger
+     * @param MagentoMappingMerger                $categoryMappingMerger
+     * @param MetricConverter                     $metricConverter
      */
     public function __construct(
         WebserviceGuesser $webserviceGuesser,
@@ -118,21 +77,27 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
         AssociationTypeManager $associationTypeManager,
         CurrencyManager $currencyManager,
         ChannelManager $channelManager,
-        MagentoMappingMerger $attributeMappingMerger
+        MagentoMappingMerger $attributeMappingMerger,
+        MagentoMappingMerger $categoryMappingMerger,
+        MetricConverter $metricConverter,
+        CategoryMappingManager $categoryMappingManager
     ) {
         parent::__construct(
             $webserviceGuesser,
             $normalizerGuesser,
             $localeManager,
             $storeViewMappingMerger,
+            $currencyManager,
+            $channelManager,
+            $categoryMappingMerger,
+            $attributeMappingMerger,
             $clientParametersRegistry
         );
 
         $this->attributeManager       = $attributeManager;
         $this->associationTypeManager = $associationTypeManager;
-        $this->currencyManager        = $currencyManager;
-        $this->channelManager         = $channelManager;
-        $this->attributeMappingMerger = $attributeMappingMerger;
+        $this->metricConverter        = $metricConverter;
+        $this->categoryMappingManager = $categoryMappingManager;
     }
 
     /**
@@ -140,14 +105,16 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
      */
     public function process($item)
     {
-        $this->beforeExecute();
+        if (!$this->initialized) {
+            $this->beforeExecute();
+        }
 
         $processedItem = $this->normalizeProduct($item, $this->globalContext);
 //        die(var_dump($processedItem));
 
 //        $magentoProducts = $this->webservice->getProductsStatus($item);
 
-
+        $this->stepExecution->incrementSummaryInfo('process');
 //        printf('ITEM');
 //        die(var_dump($item));
         return $processedItem;
@@ -250,174 +217,36 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
     }
 
     /**
-     * get channel
-     *
-     * @return string channel
-     */
-    public function getChannel()
-    {
-        return $this->channel;
-    }
-
-    /**
-     * Set channel
-     *
-     * @param string $channel channel
-     *
-     * @return AbstractProcessor
-     */
-    public function setChannel($channel)
-    {
-        $this->channel = $channel;
-
-        return $this;
-    }
-
-    /**
-     * get currency
-     *
-     * @return string currency
-     */
-    public function getCurrency()
-    {
-        return $this->currency;
-    }
-
-    /**
-     * Set currency
-     *
-     * @param string $currency currency
-     *
-     * @return AbstractProcessor
-     */
-    public function setCurrency($currency)
-    {
-        $this->currency = $currency;
-
-        return $this;
-    }
-
-    /**
-     * get enabled
-     *
-     * @return string enabled
-     */
-    public function getEnabled()
-    {
-        return $this->enabled;
-    }
-
-    /**
-     * Set enabled
-     *
-     * @param string $enabled enabled
-     *
-     * @return AbstractProcessor
-     */
-    public function setEnabled($enabled)
-    {
-        $this->enabled = $enabled;
-
-        return $this;
-    }
-
-    /**
-     * get visibility
-     *
-     * @return string visibility
-     */
-    public function getVisibility()
-    {
-        return $this->visibility;
-    }
-
-    /**
-     * Set visibility
-     *
-     * @param string $visibility visibility
-     *
-     * @return AbstractProcessor
-     */
-    public function setVisibility($visibility)
-    {
-        $this->visibility = $visibility;
-
-        return $this;
-    }
-
-    /**
-     * Get attribute code mapping
-     *
-     * @return string attributeCodeMapping
-     */
-    public function getAttributeCodeMapping()
-    {
-        return json_encode($this->attributeMappingMerger->getMapping()->toArray());
-    }
-
-    /**
-     * Set attribute code mapping
-     *
-     * @param string $attributeCodeMapping attributeCodeMapping
-     *
-     * @return AbstractProcessor
-     */
-    public function setAttributeCodeMapping($attributeCodeMapping)
-    {
-        $this->attributeMappingMerger->setMapping(json_decode($attributeCodeMapping, true));
-
-        return $this;
-    }
-
-    /**
      * Function called before all process
      */
     protected function beforeExecute()
     {
         parent::beforeExecute();
 
-        if (!$this->initialized) {
-            $this->magentoStoreViews        = $this->webservice->getStoreViewsList();
-            $this->magentoAttributes        = $this->webservice->getAllAttributes();
-            $this->magentoAttributesOptions = $this->webservice->getAllAttributesOptions();
-            $this->productNormalizer        = $this->normalizerGuesser->getProductMagentoCsvNormalizer(
-                $this->getClientParameters(),
-                $this->currency
-            );
+        $channelCategoryRoot     = $this->channelManager->getChannelByCode($this->channel)->getCategory();
+        $magentoRootCategoryId   = $this->globalContext['userCategoryMapping']->getTarget($channelCategoryRoot->getCode());
+        $magentoCategoryTree     = $this->webservice->getCategoryTree($magentoRootCategoryId);
+        $magentoMappingCategory  = $this->categoryMappingManager->getMappingByRootAndMagentoUrl($channelCategoryRoot, $this->getSoapUrl());
 
-            $this->initialized = true;
-        }
 
         $this->globalContext = array_merge(
             $this->globalContext,
             [
-                'channel'                  => $this->channel,
-                'locales'                  => $this->localeManager->getActiveCodes(),
-                'defaultLocale'            => $this->getDefaultLocale(),
-                'website'                  => $this->website,
-                'magentoAttributes'        => $this->magentoAttributes,
-                'magentoAttributesOptions' => $this->magentoAttributesOptions,
-                'magentoStoreViews'        => $this->magentoStoreViews,
-                'pimGrouped'               => $this->pimGrouped,
-                'smallImageAttribute'      => $this->smallImageAttribute,
-                'baseImageAttribute'       => $this->baseImageAttribute,
-                'thumbnailAttribute'       => $this->thumbnailAttribute,
-                'defaultStoreView'         => $this->getDefaultStoreView(),
-                'attributeCodeMapping'     => $this->attributeMappingMerger->getMapping(),
-                'enabled'                  => $this->getEnabled(),
-                'visibility'               => $this->getVisibility()
+                'locales'                => $this->localeManager->getActiveCodes(),
+                'defaultLocale'          => $this->getDefaultLocale(),
+                'pimGrouped'             => $this->pimGrouped,
+                'smallImageAttribute'    => $this->smallImageAttribute,
+                'baseImageAttribute'     => $this->baseImageAttribute,
+                'thumbnailAttribute'     => $this->thumbnailAttribute,
+                'defaultStoreView'       => $this->getDefaultStoreView(),
+                'enabled'                => $this->getEnabled(),
+                'visibility'             => $this->getVisibility(),
+                'magentoCategoryTree'    => $magentoCategoryTree,
+                'channelCategoryRoot'    => $channelCategoryRoot,
+                'magentoCategoryMapping' => $magentoMappingCategory
             ]
         );
-    }
-
-    /**
-     * Called after the configuration is set
-     */
-    protected function afterConfigurationSet()
-    {
-        parent::afterConfigurationSet();
-
-        $this->attributeMappingMerger->setParameters($this->getClientParameters(), $this->getDefaultStoreView());
+        $this->initialized = true;
     }
 
     /**
@@ -427,45 +256,7 @@ class ProductToMagentoCsvProcessor extends AbstractProcessor
     {
         return array_merge(
             parent::getConfigurationFields(),
-            $this->attributeMappingMerger->getConfigurationField(),
             [
-                'channel' => [
-                    'type'    => 'choice',
-                    'options' => [
-                        'choices'  => $this->channelManager->getChannelChoices(),
-                        'required' => true,
-                        'help'     => 'pim_magento_connector.export.channel.help',
-                        'label'    => 'pim_magento_connector.export.channel.label'
-                    ]
-                ],
-                'enabled' => [
-                    'type'    => 'switch',
-                    'options' => [
-                        'required' => true,
-                        'help'     => 'pim_magento_connector.export.enabled.help',
-                        'label'    => 'pim_magento_connector.export.enabled.label'
-                    ]
-                ],
-                'visibility' => [
-                    'type'    => 'text',
-                    'options' => [
-                        'required' => true,
-                        'help'     => 'pim_magento_connector.export.visibility.help',
-                        'label'    => 'pim_magento_connector.export.visibility.label'
-                    ]
-                ],
-                'currency' => [
-                    'type'    => 'choice',
-                    'options' => [
-                        'choices'  => $this->currencyManager->getCurrencyChoices(),
-                        'required' => true,
-                        'help'     => 'pim_magento_connector.export.currency.help',
-                        'label'    => 'pim_magento_connector.export.currency.label',
-                        'attr' => [
-                            'class' => 'select2'
-                        ]
-                    ]
-                ],
                 'smallImageAttribute' => [
                     'type' => 'choice',
                     'options' => [

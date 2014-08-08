@@ -85,6 +85,27 @@ class CategoryMappingManager
     }
 
     /**
+     * Give the mapping between pim categories id and magento categories id by pim category root and magento url
+     * Return [ akeneo_category_id => [magento_category_ids, ..], .. ]
+     *
+     * @param CategoryInterface $root
+     * @param string            $magentoUrl
+     *
+     * @return array
+     */
+    public function getMappingByRootAndMagentoUrl(CategoryInterface $root, $magentoUrl)
+    {
+        $unsortedMapping = $this->getEntityRepository()->getMappingByRootAndMagentoUrl($root, $magentoUrl);
+        $mapping = [];
+
+        foreach ($unsortedMapping as $categoryMapping) {
+            $mapping[$categoryMapping['id']] = $categoryMapping['magentoCategoryId'];
+        }
+
+        return $mapping;
+    }
+
+    /**
      * Register a new category mapping
      * @param CategoryInterface $pimCategory
      * @param int               $magentoCategoryId

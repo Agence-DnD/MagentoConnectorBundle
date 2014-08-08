@@ -4,10 +4,13 @@ namespace Pim\Bundle\MagentoConnectorBundle\Normalizer;
 
 use Pim\Bundle\CatalogBundle\Model\ProductInterface;
 use Pim\Bundle\ConnectorMappingBundle\Mapper\MappingCollection;
+use Pim\Bundle\MagentoConnectorBundle\Webservice\CategoryPathResolver;
+use Pim\Bundle\MagentoConnectorBundle\Manager\CategoryMappingManager;
 use Symfony\Component\Serializer\Normalizer\scalar;
 use Pim\Bundle\CatalogBundle\Entity\AttributeOption;
 use Pim\Bundle\CatalogBundle\Manager\ChannelManager;
 use Pim\Bundle\CatalogBundle\Manager\MediaManager;
+use Pim\Bundle\CatalogBundle\Manager\CategoryManager;
 
 /**
  * A normalizer to transform a product entity into Magento Csv format
@@ -27,6 +30,8 @@ class ProductMagentoCsvNormalizer extends AbstractNormalizer
     const PRODUCT_WEBSITE     = '_product_websites';
     const PRODUCT_TYPE        = '_type';
     const PRODUCT_TYPE_SIMPLE = 'simple';
+    const CATEGORY_ROOT       = '_root_category';
+    const CATEGORY            = '_category';
 
     /** @var ProductValueNormalizer */
     protected $productValueNormalizer;
@@ -34,19 +39,27 @@ class ProductMagentoCsvNormalizer extends AbstractNormalizer
     /** @var MediaManager */
     protected $mediaManager;
 
+    /** @var CategoryMappingManager */
+    protected $categoryMappingManager;
+
     /** @var string */
     protected $currencyCode;
 
+    /** @var CategoryPathResolver */
+    protected $categoryPathResolver;
+
     /**
-     * Constructor
      * @param ChannelManager         $channelManager
      * @param MediaManager           $mediaManager
      * @param ProductValueNormalizer $productValueNormalizer
+     * @param CategoryPathResolver   $categoryPathResolver
+     * @param string                 $currencyCode
      */
     public function __construct(
         ChannelManager $channelManager,
         MediaManager $mediaManager,
         ProductValueNormalizer $productValueNormalizer,
+        CategoryPathResolver $categoryPathResolver,
         $currencyCode
     ) {
         parent::__construct($channelManager);
@@ -54,6 +67,8 @@ class ProductMagentoCsvNormalizer extends AbstractNormalizer
         $this->mediaManager           = $mediaManager;
         $this->productValueNormalizer = $productValueNormalizer;
         $this->currencyCode           = $currencyCode;
+        $this->channelManager         = $channelManager;
+        $this->categoryPathResolver   = $categoryPathResolver;
     }
 
     /**
@@ -88,8 +103,26 @@ class ProductMagentoCsvNormalizer extends AbstractNormalizer
             }
             $value['_store'] = $context['storeViewMapping']->getTarget($storeView);
         }
+        $processedItem = array_values($processedItem);
 
-        return array_values($processedItem);
+        $categories = $this->getProductCategories(
+            $object,
+            $context['userCategoryMapping'],
+            $this->categoryPathResolver,
+            $context['magentoCategoryMapping'],
+            $context['channelCategoryRoot'],
+            $context['magentoCategoryTree'],
+            $context['defaultLocale']
+        );
+
+        foreach ($categories[self::CATEGORY] as $key => $category) {
+            $processedItem[] = [
+                self::CATEGORY      => $category,
+                self::CATEGORY_ROOT => $categories[self::CATEGORY_ROOT][$key]
+            ];
+        }
+
+        return $processedItem;
     }
 
     /**
@@ -199,9 +232,68 @@ class ProductMagentoCsvNormalizer extends AbstractNormalizer
             self::VISIBILITY      => (integer) $context['visibility'],
             self::ATTRIBUTE_SET   => $product->getFamily()->getCode(),
             self::CREATED_AT      => $product->getCreated()->format(AbstractNormalizer::DATE_FORMAT),
-            self::UPDATED_AT      => $product->getUpdated()->format(AbstractNormalizer::DATE_FORMAT)
+            self::UPDATED_AT      => $product->getUpdated()->format(AbstractNormalizer::DATE_FORMAT),
         ];
 
         return $processedItem;
+    }
+
+
+    /**
+     * Get normalized categories for the given product
+     * Return
+     * [
+     *   '_root_category' => ['rootOfCategory_1_path', 'rootOfCategory_2_path', ...],
+     *   '_category' => [ 'category_1_path', 'category_2_path', ...]
+     * ]
+     *
+     * @param ProductInterface       $product
+     * @param CategoryManager        $categoryManager
+     * @param MappingCollection      $categoryMapping
+     * @param CategoryMappingManager $categoryMappingManager
+     * @param CategoryPathResolver   $categoryPathResolver
+     * @param CategoryInterface      $channelRootCategory
+     * @param array                  $magentoCategoryTree
+     * @param string                 $defaultLocale
+     *
+     * @return array
+     */
+    protected function getProductCategories(
+        ProductInterface $product,
+        MappingCollection $userCategoryMapping,
+        CategoryPathResolver $categoryPathResolver,
+        $magentoCategoryMapping,
+        $channelRootCategory,
+        $magentoCategoryTree,
+        $defaultLocale
+    ) {
+        $productCategories = [];
+        foreach ($product->getCategories() as $category) {
+
+            $magentoCategoryPath = $categoryPathResolver->getPath(
+                $category,
+                $userCategoryMapping,
+                $magentoCategoryMapping,
+                $magentoCategoryTree,
+                $defaultLocale
+            );
+
+            if ($userCategoryMapping->getTarget($channelRootCategory->getCode()) === $magentoCategoryTree['category_id']) {
+                $productCategories[self::CATEGORY_ROOT][] = $magentoCategoryTree['name'];
+            } else {
+                $rootCategoryPath = $categoryPathResolver->getPath(
+                    $channelRootCategory,
+                    $userCategoryMapping,
+                    $magentoCategoryMapping,
+                    $magentoCategoryTree,
+                    $defaultLocale
+                );
+
+                $productCategories[self::CATEGORY_ROOT][] = $rootCategoryPath;
+            }
+            $productCategories[self::CATEGORY][] = $magentoCategoryPath;
+        }
+
+        return $productCategories;
     }
 }

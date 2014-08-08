@@ -4,6 +4,7 @@ namespace Pim\Bundle\MagentoConnectorBundle\Entity\Repository;
 
 use Pim\Bundle\CatalogBundle\Entity\Repository\CurrencyRepository as BaseCurrencyRepository;
 
+//TODO: REMOVE IT
 /**
  * Custom currency repository
  *

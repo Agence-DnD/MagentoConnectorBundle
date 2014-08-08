@@ -6,10 +6,12 @@ use Pim\Bundle\MagentoConnectorBundle\Normalizer\AbstractNormalizer;
 use Pim\Bundle\MagentoConnectorBundle\Normalizer\ProductNormalizer;
 use Pim\Bundle\MagentoConnectorBundle\Normalizer\ProductNormalizer16;
 use Pim\Bundle\MagentoConnectorBundle\Normalizer\ConfigurableNormalizer;
+use Pim\Bundle\MagentoConnectorBundle\Webservice\CategoryPathResolver;
 use Pim\Bundle\MagentoConnectorBundle\Webservice\MagentoSoapClientParameters;
 use Pim\Bundle\MagentoConnectorBundle\Webservice\MagentoSoapClientFactory;
 use Pim\Bundle\CatalogBundle\Manager\ChannelManager;
 use Pim\Bundle\CatalogBundle\Manager\MediaManager;
+use Pim\Bundle\CatalogBundle\Manager\CategoryManager;
 use Pim\Bundle\MagentoConnectorBundle\Manager\PriceMappingManager;
 use Pim\Bundle\MagentoConnectorBundle\Normalizer\ProductNormalizerInterface;
 use Pim\Bundle\MagentoConnectorBundle\Normalizer\ProductValueNormalizer;
@@ -61,6 +63,9 @@ class NormalizerGuesser extends AbstractGuesser
      */
     protected $productValueManager;
 
+    /** @var CategoryPathResolver */
+    protected $categoryPathResolver;
+
     /**
      * Constructor
      * @param MagentoSoapClientFactory $magentoSoapClientFactory
@@ -70,6 +75,8 @@ class NormalizerGuesser extends AbstractGuesser
      * @param CategoryMappingManager   $categoryMappingManager
      * @param AssociationTypeManager   $associationTypeManager
      * @param ProductValueManager      $productValueManager
+     * @param CategoryManager          $categoryManager
+     * @param CategoryPathResolver     $categoryPathResolver
      */
     public function __construct(
         MagentoSoapClientFactory $magentoSoapClientFactory,
@@ -78,7 +85,9 @@ class NormalizerGuesser extends AbstractGuesser
         ProductValueNormalizer $productValueNormalizer,
         CategoryMappingManager $categoryMappingManager,
         AssociationTypeManager $associationTypeManager,
-        ProductValueManager $productValueManager
+        ProductValueManager $productValueManager,
+        CategoryManager $categoryManager,
+        CategoryPathResolver $categoryPathResolver
     ) {
         $this->magentoSoapClientFactory = $magentoSoapClientFactory;
         $this->channelManager           = $channelManager;
@@ -87,6 +96,8 @@ class NormalizerGuesser extends AbstractGuesser
         $this->categoryMappingManager   = $categoryMappingManager;
         $this->associationTypeManager   = $associationTypeManager;
         $this->productValueManager      = $productValueManager;
+        $this->categoryManager          = $categoryManager;
+        $this->categoryPathResolver     = $categoryPathResolver;
     }
 
     /**
@@ -273,8 +284,10 @@ class NormalizerGuesser extends AbstractGuesser
      * @throws ApiImportNotSupportedException
      *
      */
-    public function getProductMagentoCsvNormalizer(MagentoSoapClientParameters $clientParameters, $currencyCode)
-    {
+    public function getProductMagentoCsvNormalizer(
+        MagentoSoapClientParameters $clientParameters,
+        $currencyCode
+    ) {
         $client = $this->magentoSoapClientFactory->getMagentoSoapClient($clientParameters);
         $apiImportStatus = $this->getApiImportStatus($client);
 
@@ -283,6 +296,7 @@ class NormalizerGuesser extends AbstractGuesser
                 $this->channelManager,
                 $this->mediaManager,
                 $this->productValueNormalizer,
+                $this->categoryPathResolver,
                 $currencyCode
             );
         } else {

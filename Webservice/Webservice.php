@@ -814,6 +814,14 @@ class Webservice
     }
 
     /**
+     *
+     */
+    public function getCategoryTree($parentId = null, $storeView = null)
+    {
+        return $this->client->call(self::SOAP_ACTION_CATEGORY_TREE, $parentId, $storeView);
+    }
+
+    /**
      * Get the products status for the given skus
      * @param array $skus
      *
