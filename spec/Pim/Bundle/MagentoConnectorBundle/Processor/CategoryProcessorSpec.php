@@ -180,6 +180,7 @@ class CategoryProcessorSpec extends ObjectBehavior
 
     function it_sets_storeview_mapping($storeViewMappingMerger, MappingCollection $mappingCollection)
     {
+        $storeViewMappingMerger->setParameters(Argument::cetera())->shouldBeCalled();
         $storeViewMappingMerger->setMapping(json_decode('{"fr_FR":{"source":"fr_FR","target":"fr_fr"}}', true))->willReturn(['fr_FR' => ['source' => 'fr_FR', 'target' => 'fr_fr']]);
         $storeViewMappingMerger->getMapping()->shouldBeCalled()->willReturn($mappingCollection);
         $mappingCollection->toArray()->shouldBeCalled()->willReturn(['fr_FR' => ['source' => 'fr_FR', 'target' => 'fr_fr', 'deletable' => 'true']]);

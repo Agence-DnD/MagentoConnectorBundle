@@ -76,7 +76,15 @@ class AttributeProcessor extends AbstractProcessor
      */
     public function setAttributeCodeMapping($attributeCodeMapping)
     {
-        $this->attributeMappingMerger->setMapping(json_decode($attributeCodeMapping, true));
+        $decodedAttributeCodeMapping = json_decode($attributeCodeMapping, true);
+
+        if (!is_array($decodedAttributeCodeMapping)) {
+            $decodedAttributeCodeMapping = [$decodedAttributeCodeMapping];
+        }
+
+        $this->attributeMappingMerger->setParameters($this->getClientParameters(), $this->getDefaultStoreView());
+        $this->attributeMappingMerger->setMapping($decodedAttributeCodeMapping);
+        $this->attributeCodeMapping = $this->getAttributeCodeMapping();
 
         return $this;
     }

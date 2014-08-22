@@ -59,7 +59,7 @@ class CategoryProcessor extends AbstractProcessor
     }
 
     /**
-     * get categoryMapping
+     * Get categoryMapping
      *
      * @return string categoryMapping
      */
@@ -77,7 +77,15 @@ class CategoryProcessor extends AbstractProcessor
      */
     public function setCategoryMapping($categoryMapping)
     {
-        $this->categoryMappingMerger->setMapping(json_decode($categoryMapping, true));
+        $decodedCategoryMapping = json_decode($categoryMapping, true);
+
+        if (!is_array($decodedCategoryMapping)) {
+            $decodedCategoryMapping = [$decodedCategoryMapping];
+        }
+
+        $this->categoryMappingMerger->setParameters($this->getClientParameters(), $this->getDefaultStoreView());
+        $this->categoryMappingMerger->setMapping($decodedCategoryMapping);
+        $this->categoryMapping = $this->getCategoryMapping();
 
         return $this;
     }

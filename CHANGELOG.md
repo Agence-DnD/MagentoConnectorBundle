@@ -2,12 +2,17 @@
 ## Bug fixes
 - Product cleaner is cleaner
 - Version detection fix
+- Fix a bug with mappings
 
 ## Improvement
 - Compatibility with pim-community 1.2.0-RC3
+- Compatibility with ConnectorBundleBundle BETA-3
+- Stop Compatibility with DeltaExportBundle BETA-2
 
 ## BC Breaks
 - Stop compatibility with pim-community 1.1
+- Stop Compatibility with ConnectorBundleBundle BETA-2
+- Stop Compatibility with DeltaExportBundle BETA-1
 
 # 1.0.0-RC7 -
 ## Features

@@ -73,7 +73,15 @@ class OptionProcessor extends AbstractProcessor
      */
     public function setAttributeCodeMapping($attributeCodeMapping)
     {
-        $this->attributeCodeMappingMerger->setMapping(json_decode($attributeCodeMapping, true));
+        $decodedAttributeCodeMapping = json_decode($attributeCodeMapping, true);
+
+        if (!is_array($decodedAttributeCodeMapping)) {
+            $decodedAttributeCodeMapping = [$decodedAttributeCodeMapping];
+        }
+
+        $this->attributeCodeMappingMerger->setParameters($this->getClientParameters(), $this->getDefaultStoreView());
+        $this->attributeCodeMappingMerger->setMapping($decodedAttributeCodeMapping);
+        $this->attributeCodeMapping = $this->getAttributeCodeMapping();
 
         return $this;
     }

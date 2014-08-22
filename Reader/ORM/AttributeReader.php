@@ -34,11 +34,17 @@ class AttributeReader extends EntityReader
      *
      * @param string $attributeCodeMapping
      *
-     * @return AttributeProcessor
+     * @return AttributeReader
      */
     public function setAttributeCodeMapping($attributeCodeMapping)
     {
-        $this->attributeCodeMappingMerger->setMapping(json_decode($attributeCodeMapping, true));
+        $decodedAttributeCodeMapping = json_decode($attributeCodeMapping, true);
+
+        if (!is_array($decodedAttributeCodeMapping)) {
+            $decodedAttributeCodeMapping = [$decodedAttributeCodeMapping];
+        }
+
+        $this->attributeCodeMappingMerger->setMapping($decodedAttributeCodeMapping);
 
         return $this;
     }

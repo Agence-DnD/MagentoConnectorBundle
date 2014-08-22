@@ -13,6 +13,7 @@ use Doctrine\ORM\EntityRepository;
 use Pim\Bundle\CatalogBundle\Entity\Attribute;
 use Akeneo\Bundle\BatchBundle\Entity\StepExecution;
 use PhpSpec\ObjectBehavior;
+use Prophecy\Argument;
 
 class AttributeCleanerSpec extends ObjectBehavior
 {
@@ -132,6 +133,7 @@ class AttributeCleanerSpec extends ObjectBehavior
 
     function it_sets_attribute_mapping_to_the_attribute_mapping_merger($attributeMappingMerger)
     {
+        $attributeMappingMerger->setParameters(Argument::cetera())->shouldBeCalled();
         $attributeMappingMerger->setMapping([])->shouldBeCalled();
 
         $this->setAttributeCodeMapping('[]');

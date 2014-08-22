@@ -135,8 +135,14 @@ abstract class AbstractProcessor extends MagentoItemStep implements ItemProcesso
      */
     public function setStoreViewMapping($storeViewMapping)
     {
-        $this->storeViewMappingMerger->setMapping(json_decode($storeViewMapping, true));
+        $decodedStoreViewMapping = json_decode($storeViewMapping, true);
 
+        if (!is_array($decodedStoreViewMapping)) {
+            $decodedStoreViewMapping = [$decodedStoreViewMapping];
+        }
+
+        $this->storeViewMappingMerger->setParameters($this->getClientParameters(), $this->getDefaultStoreView());
+        $this->storeViewMappingMerger->setMapping($decodedStoreViewMapping);
         $this->storeviewMapping = $this->getStoreViewMapping();
 
         return $this;
@@ -179,9 +185,9 @@ abstract class AbstractProcessor extends MagentoItemStep implements ItemProcesso
     {
         parent::beforeExecute();
 
-        $this->globalContext['defaultLocale']     = $this->defaultLocale;
-        $this->globalContext['storeViewMapping']  = $this->storeViewMappingMerger->getMapping();
-        $this->globalContext['defaultStoreView']  = $this->getDefaultStoreView();
+        $this->globalContext['defaultLocale']    = $this->defaultLocale;
+        $this->globalContext['storeViewMapping'] = $this->storeViewMappingMerger->getMapping();
+        $this->globalContext['defaultStoreView'] = $this->getDefaultStoreView();
     }
 
     /**
