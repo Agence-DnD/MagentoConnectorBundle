@@ -1,5 +1,5 @@
 {
-    "name": "akeneo/magento-connector-bundle",
+    "name": "agence-dnd/magento-connector-bundle",
     "type": "symfony-bundle",
     "description": "Akeneo PIM bundle to export to Magento platform",
     "keywords": ["pim", "akeneo", "ecommerce", "e-commerce", "magento", "connector", "soap", "api"],
@@ -24,7 +24,7 @@
     ],
     "require": {
         "guzzle/service": ">=3.6.0,<3.8.0",
-        "akeneo/pim-community-dev": "v1.2.0-RC3",
+        "akeneo/pim-community-dev": "1.2.x-dev",
         "akeneo/delta-export-bundle": "v1.0.0-BETA2",
         "akeneo/connector-mapping-bundle": "v1.0.0-BETA3"
     },
